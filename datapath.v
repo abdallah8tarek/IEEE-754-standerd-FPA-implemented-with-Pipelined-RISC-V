@@ -3,7 +3,7 @@
 `include "reg_file.v"
 `include "sign_extend.v"
 `include "ALU.v"
-`include "FPAU.v"
+`include "FPU.v"
 `include "d_flip_flop_32.v"
 `include "hazerd_unit.v"
 module datapath (instr,instrD,read_data,clk,reset
@@ -175,7 +175,7 @@ dmux2 #(32) srcA_dmux(.dmux_in(sourceA),
 //FPAU (FPUout,a,b,FPUControl)
 wire [31:0] fpu_res;
 wire [3:0] fpu_controlE;
-FPAU fpu1(.FPUout(fpu_res),
+FPU fpu1(.FPUout(fpu_res),
 		 .a(sourceA_float),
 		 .b(sourceB_float),
 		 .FPUControl(fpu_controlE),
