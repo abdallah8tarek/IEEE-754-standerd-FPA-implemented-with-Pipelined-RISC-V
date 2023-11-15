@@ -1,4 +1,4 @@
-module fpau_tb ();
+module fpu_tb ();
 
 reg [31:0] a;
 reg [31:0] b;
@@ -10,7 +10,7 @@ reg [31:0] FPUout_expected;
 
 localparam t = 10; 
  
-FPAU ff(FPUout,a,b,FPUControl);
+FPU ff(FPUout,a,b,FPUControl,);
 
 //test ADD
 initial
