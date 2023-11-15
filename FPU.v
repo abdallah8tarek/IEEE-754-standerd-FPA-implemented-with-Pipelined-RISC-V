@@ -1,4 +1,4 @@
-module FPAU (FPUout,a,b,FPUControl,rs2E_0);
+module FPU (FPUout,a,b,FPUControl,rs2E_0);
 	
 output reg [31:0] FPUout;
 input [3:0] FPUControl;
@@ -14,14 +14,28 @@ wire [7:0] b_expo = b[30:23];
 reg b_sign;// to be equaled b[31] if add and ~b[31] if sub
 wire [22:0] b_mant = b[22:0];
 
-reg [23:0] temp;
+reg [7:0] temp_expo;
+reg [8:0] temp_expo0;
+reg [7:0] expo_out;
+reg [24:0] temp;
+reg [24:0] temp_0;
 reg [54:0] temp_conv;
-reg [22:0] temp_ab;
+reg [23:0] temp_a;
+reg [23:0] temp_b;
+reg [23:0] temp_b_shift;
+reg [23:0] temp_a_shift;
+//[b_expo > a_expo] & [a_expo = 0] & [b_expo < 23] --> (+-1.) + (+-0.) overflow
 always @(*) 
 begin
 	temp = 23'd0;
 	temp_conv = {31'd0,1'b1,a_mant};
-	temp_ab = 22'd0;
+	temp_a = a_expo ? {1'b1,a_mant[22:0]} : {1'b0,a_mant[22:0]};
+	temp_b = b_expo ? {1'b1,b_mant[22:0]} : {1'b0,b_mant[22:0]};
+	temp_a_shift = a_expo ? {1'b1,a_mant[22:0]} : {1'b0,a_mant[22:0]};
+	temp_b_shift = b_expo ? {1'b1,b_mant[22:0]} : {1'b0,b_mant[22:0]};
+	temp_expo0 = {1'b1,a_expo} - {1'b0,b_expo};
+	temp_expo = temp_expo0[8] ? temp_expo0[7:0] : ~(temp_expo0[7:0]-8'd1);
+	expo_out = temp_expo0[8] ? a_expo : b_expo;
 	if (FPUControl == 4'd1) //sub
 		b_sign = ~b[31];
 	else
@@ -71,177 +85,45 @@ begin
 									end
 							end
 						else // (a_sign != b_sign)  +-1.0  +  -+1.0
-								begin
-									if (b_mant > a_mant)
-										begin
-											temp = b_mant - a_mant;
-											FPUout = {b_sign,norm_out(b_expo,temp[22:0])};
-										end
-									else if (b_mant < a_mant)
-										begin
-											temp = a_mant - b_mant;
-											FPUout = {a_sign,norm_out(b_expo,temp[22:0])};
-										end
-									else //+-a == -+b --> out = +or-0
-										FPUout = {a_sign,31'd0};
-								end
+							begin
+								temp = temp_a - temp_b;
+								FPUout[31] = temp[24] ? b_sign : a_sign;
+								temp_0 = temp[24] ? ~(temp-24'd1) : temp;										
+								FPUout[30:0] = norm_out(b_expo,temp[22:0]);
+							end
 					end
-					else if (a_expo > b_expo)
+					else	//(a_expo > b_expo) | (b_expo > a_expo)
 					begin
-						if ((b_expo && ((a_expo-b_expo) >= 8'd24)) || (!(b_expo) && (a_expo >= 8'd23)))
-							FPUout = a;
+						if (temp_expo >= 8'd24)
+							FPUout = (temp_expo0[8]) ? a : b;
 						else
 							begin
-								if (b_expo == 8'd0)
-									begin
-										case (a_expo) //synopsis full_case
-										8'd1  : temp_ab = b_mant;
-										8'd2  : temp_ab = (b_mant>>1);
-										8'd3  : temp_ab = (b_mant>>2);
-										8'd4  : temp_ab = (b_mant>>3);
-										8'd5  : temp_ab = (b_mant>>4);
-										8'd6  : temp_ab = (b_mant>>5);
-										8'd7  : temp_ab = (b_mant>>6);
-										8'd8  : temp_ab = (b_mant>>7);
-										8'd9  : temp_ab = (b_mant>>8);
-										8'd10 : temp_ab = (b_mant>>9);
-										8'd11 : temp_ab = (b_mant>>10);
-										8'd12 : temp_ab = (b_mant>>11);
-										8'd13 : temp_ab = (b_mant>>12);
-										8'd14 : temp_ab = (b_mant>>13);
-										8'd15 : temp_ab = (b_mant>>14);
-										8'd16 : temp_ab = (b_mant>>15);
-										8'd17 : temp_ab = (b_mant>>16);
-										8'd18 : temp_ab = (b_mant>>17);
-										8'd19 : temp_ab = (b_mant>>18);
-										8'd20 : temp_ab = (b_mant>>19);
-										8'd21 : temp_ab = (b_mant>>20);
-										8'd22 : temp_ab = (b_mant>>21);
-										endcase
-									end
+								if (temp_expo0[8]) //(a_expo > b_expo)
+									temp_b_shift = (b_expo == 8'd0) ? temp_b>>(temp_expo[4:0]-5'd1) : temp_b>>temp_expo[4:0];
 								else
-									begin
-										case (a_expo - b_expo) //synopsis full_case
-										8'd1  : temp_ab = ({1'b1,b_mant[22:1]});
-										8'd2  : temp_ab = ({1'b1,b_mant[22:1]}>>1);
-										8'd3  : temp_ab = ({1'b1,b_mant[22:1]}>>2);
-										8'd4  : temp_ab = ({1'b1,b_mant[22:1]}>>3);
-										8'd5  : temp_ab = ({1'b1,b_mant[22:1]}>>4);
-										8'd6  : temp_ab = ({1'b1,b_mant[22:1]}>>5);
-										8'd7  : temp_ab = ({1'b1,b_mant[22:1]}>>6);
-										8'd8  : temp_ab = ({1'b1,b_mant[22:1]}>>7);
-										8'd9  : temp_ab = ({1'b1,b_mant[22:1]}>>8);
-										8'd10 : temp_ab = ({1'b1,b_mant[22:1]}>>9);
-										8'd11 : temp_ab = ({1'b1,b_mant[22:1]}>>10);
-										8'd12 : temp_ab = ({1'b1,b_mant[22:1]}>>11);
-										8'd13 : temp_ab = ({1'b1,b_mant[22:1]}>>12);
-										8'd14 : temp_ab = ({1'b1,b_mant[22:1]}>>13);
-										8'd15 : temp_ab = ({1'b1,b_mant[22:1]}>>14);
-										8'd16 : temp_ab = ({1'b1,b_mant[22:1]}>>16);
-										8'd18 : temp_ab = ({1'b1,b_mant[22:1]}>>17);
-										8'd19 : temp_ab = ({1'b1,b_mant[22:1]}>>18);
-										8'd20 : temp_ab = ({1'b1,b_mant[22:1]}>>29);
-										8'd21 : temp_ab = ({1'b1,b_mant[22:1]}>>20);
-										8'd22 : temp_ab = ({1'b1,b_mant[22:1]}>>21);
-										8'd23 : temp_ab = ({1'b1,b_mant[22:1]}>>22);
-										endcase
-									end
+									temp_a_shift = (a_expo == 8'd0) ? temp_a>>(temp_expo[4:0]-5'd1) : temp_a>>temp_expo[4:0];
+									
 								if (a_sign == b_sign)
 									begin
-										temp = a_mant + temp_ab;
-										if (temp[23])
-											FPUout = {a_sign,(a_expo+8'd1),{1'b0},temp[22:1]};
-										else
-											FPUout = {a_sign,a_expo,temp[22:0]};
+										temp = temp_a_shift + temp_b_shift;
+										if (temp[23]) //no overflow
+											FPUout = {a_sign,expo_out,temp[22:0]};
+										else //overflow
+											FPUout = {a_sign,(expo_out+8'd1),{1'b0},temp[22:1]};	
 									end
 								else 
 									begin
-										temp = {1'b1,a_mant} - {1'b0,temp_ab};
-										if (temp[23])
-											FPUout = {a_sign,a_expo,temp[22:0]};
+										temp = temp_a_shift - temp_b_shift;
+										FPUout[31] = temp[24] ? b_sign : a_sign;
+										expo_out = temp[24] ? b_expo : a_expo;
+										temp_0 = temp[24] ? ~(temp-24'd1) : temp;										
+										if (temp_0[23])
+											FPUout[30:0] = {expo_out,temp_0[22:0]};
 										else
-											FPUout = {a_sign,(a_expo-8'd1),temp[21:0],1'b0};
+											FPUout[30:0]= {(expo_out-8'd1),temp_0[21:0],1'b0};
 									end
 							end
 					end
-					else if (b_expo > a_expo)
-					begin
-						if ((a_expo && ((b_expo-a_expo) >= 8'd24)) || (!(a_expo) && (b_expo >= 8'd23)))
-							FPUout = b;
-						else
-							begin
-								if (a_expo == 8'd0)
-									begin
-										case (b_expo) //synopsis full_case
-										8'd1  : temp_ab = a_mant;
-										8'd2  : temp_ab = (a_mant>>1);
-										8'd3  : temp_ab = (a_mant>>2);
-										8'd4  : temp_ab = (a_mant>>3);
-										8'd5  : temp_ab = (a_mant>>4);
-										8'd6  : temp_ab = (a_mant>>5);
-										8'd7  : temp_ab = (a_mant>>6);
-										8'd8  : temp_ab = (a_mant>>7);
-										8'd9  : temp_ab = (a_mant>>8);
-										8'd10 : temp_ab = (a_mant>>9);
-										8'd11 : temp_ab = (a_mant>>10);
-										8'd12 : temp_ab = (a_mant>>11);
-										8'd13 : temp_ab = (a_mant>>12);
-										8'd14 : temp_ab = (a_mant>>13);
-										8'd15 : temp_ab = (a_mant>>14);
-										8'd16 : temp_ab = (a_mant>>15);
-										8'd17 : temp_ab = (a_mant>>16);
-										8'd18 : temp_ab = (a_mant>>17);
-										8'd19 : temp_ab = (a_mant>>18);
-										8'd20 : temp_ab = (a_mant>>19);
-										8'd21 : temp_ab = (a_mant>>20);
-										8'd22 : temp_ab = (a_mant>>21);
-										endcase
-									end
-								else
-									begin
-										case (b_expo - a_expo) //synopsis full_case
-										8'd1  : temp_ab = ({1'b1,a_mant[22:1]});
-										8'd2  : temp_ab = ({1'b1,a_mant[22:1]}>>1);
-										8'd3  : temp_ab = ({1'b1,a_mant[22:1]}>>2);
-										8'd4  : temp_ab = ({1'b1,a_mant[22:1]}>>3);
-										8'd5  : temp_ab = ({1'b1,a_mant[22:1]}>>4);
-										8'd6  : temp_ab = ({1'b1,a_mant[22:1]}>>5);
-										8'd7  : temp_ab = ({1'b1,a_mant[22:1]}>>6);
-										8'd8  : temp_ab = ({1'b1,a_mant[22:1]}>>7);
-										8'd9  : temp_ab = ({1'b1,a_mant[22:1]}>>8);
-										8'd10 : temp_ab = ({1'b1,a_mant[22:1]}>>9);
-										8'd11 : temp_ab = ({1'b1,a_mant[22:1]}>>10);
-										8'd12 : temp_ab = ({1'b1,a_mant[22:1]}>>11);
-										8'd13 : temp_ab = ({1'b1,a_mant[22:1]}>>12);
-										8'd14 : temp_ab = ({1'b1,a_mant[22:1]}>>13);
-										8'd15 : temp_ab = ({1'b1,a_mant[22:1]}>>14);
-										8'd16 : temp_ab = ({1'b1,a_mant[22:1]}>>16);
-										8'd18 : temp_ab = ({1'b1,a_mant[22:1]}>>17);
-										8'd19 : temp_ab = ({1'b1,a_mant[22:1]}>>18);
-										8'd20 : temp_ab = ({1'b1,a_mant[22:1]}>>29);
-										8'd21 : temp_ab = ({1'b1,a_mant[22:1]}>>20);
-										8'd22 : temp_ab = ({1'b1,a_mant[22:1]}>>21);
-										8'd23 : temp_ab = ({1'b1,a_mant[22:1]}>>22);
-										endcase
-									end
-								if (a_sign == b_sign)
-									begin
-										temp = b_mant + temp_ab;
-										if (temp[23])
-											FPUout = {b_sign,(b_expo+8'd1),{1'b0},temp[22:1]};
-										else
-											FPUout = {b_sign,b_expo,temp[22:0]};
-									end
-								else 
-									begin
-										temp = {1'b1,b_mant} - {1'b0,temp_ab};
-										if (temp[23])
-											FPUout = {b_sign,b_expo,temp[22:0]};
-										else
-											FPUout = {b_sign,(b_expo-8'd1),temp[21:0],1'b0};
-									end
-							end
-					end	
 			end
 	4'd2  : FPUout = {b[31],a[30:0]};   //sign_inject
 	4'd3  : FPUout = {(~b[31]),a[30:0]};   //neg_sign_inject
@@ -564,13 +446,15 @@ begin
 		norm_out = {(8'b0),(unnorm_mant<<unnorm_expo-1)};
 end
 
-else //if (unnorm_mant[0] == 1'b1)
+else if (unnorm_mant[0] == 1'b1)
 begin
 	if ((unnorm_expo > 8'd23))
 		norm_out = {(unnorm_expo - 8'd23),23'd0};
 	else 
 		norm_out = {(8'b0),(unnorm_mant<<unnorm_expo-1)};
 end
+else // if (unnorm_mant == 22'd0)
+	norm_out = 30'd0;
 end
 
 endfunction
